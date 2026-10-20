@@ -3,6 +3,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Minhas Despesas</title>
 <meta name="theme-color" content="#0F7A68">
+<link rel="manifest" href="manifest.webmanifest"><link rel="icon" href="icon.svg"><link rel="apple-touch-icon" href="icon-192.png">
 <script>try{var _t=localStorage.getItem("despesas-tema");if(_t&&/^[a-z]+$/.test(_t))document.documentElement.setAttribute("data-pal",_t)}catch(e){}</script>
 <style>:root{color-scheme:light dark;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style>
 </head><body>
@@ -347,7 +348,51 @@ function monthNav(){return '<div class="ms"><div class="msh"><button class="x" d
 function txRow(t){
   var c=cat(t.cat),r=t.type==='r',di=dueInfo(t);
   return '<div class="row'+(di?' '+di.k:'')+'" data-act="edit" data-id="'+t.id+'" role="button" tabindex="0"><div class="th">'+esc(c?c.emoji:'📦')+'</div><div class="mid"><b>'+esc(t.desc)+'</b><small>'+esc(c?c.name:'Sem categoria')+' · '+fmtD(t.date)+'</small></div>'
-    +'<div class="right"><b class="num" style="color:'+(r?'var(--ok)':'var(--ink)')+'">'+(r?'+ ':'− ')+brl(t.val)+'</b>'+(t.paid?'<span class="chip ok">👍 '+(r?'Recebido':'Pago')+'</span>':'<button class="btn pend" data-act="pay" data-id="'+t.id+'">👎 Pendente</button>'+(di?'<small style="font-weight:600">'+di.txt+'</small>':''))+'</div></div>';
+    +'<div class="right"><b class="num" style="color:'+(r?'var(--ok)':'var(--ink)')+'">'+(r?'+ ':'− ')+brl(t.val)+'</b>'+(t.paid?'<button class="chip ok" data-act="unpay" data-id="'+t.id+'" style="border:0;font:inherit;cursor:pointer">👍 '+(r?'Recebido':'Pago')+'</button>':'<button class="btn pend" data-act="pay" data-id="'+t.id+'">👎 Pendente</button>'+(di?'<small style="font-weight:600">'+di.txt+'</small>':''))+'</div></div>';
+}
+function genRec(){
+  if(!Array.isArray(S.rec))return;
+  var lim=ym(new Date(Date.now()+5*864e5)),ch=false;
+  S.rec.forEach(function(r){
+    r.done=r.done||[];
+    for(var m=r.from;m<=lim;m=addM(m,1)){
+      if(r.done.indexOf(m)>-1)continue;
+      var p=m.split('-'),last=new Date(+p[0],+p[1],0).getDate();
+      r.done.push(m);ch=true;
+      S.tx.push({id:uid(),rid:r.id,type:r.type,desc:r.desc,val:r.val,cat:r.cat,date:m+'-'+String(Math.min(r.day,last)).padStart(2,'0'),paid:false});
+    }
+  });
+  if(ch)save();
+}
+function recForm(id){
+  var r=id?(S.rec||[]).find(function(x){return x.id===id}):null;F.type=r?r.type:'d';
+  sheet(r?'Editar conta fixa':'Nova conta fixa',
+    '<div class="seg"><button id="ft-d" class="'+(F.type==='d'?'on':'')+'" data-act="fType" data-v="d">Despesa</button><button id="ft-r" class="'+(F.type==='r'?'on':'')+'" data-act="fType" data-v="r">Receita</button></div>'
+    +'<label class="fld"><span>Valor (R$)</span><input id="f-val" type="text" inputmode="decimal" placeholder="0,00" value="'+(r?fmtNum(r.val):'')+'"></label>'
+    +'<label class="fld"><span>Descrição</span><input id="f-desc" type="text" placeholder="Ex.: Aluguel, Internet" value="'+esc(r?r.desc:'')+'" autocomplete="off"></label>'
+    +'<div class="two-f"><label class="fld"><span>Categoria</span><select id="f-cat">'+catOpts(F.type,r?r.cat:(S.cats.find(function(c){return c.t===F.type})||{}).id)+'</select></label><label class="fld"><span>Dia do mês</span><input id="f-day" type="number" min="1" max="31" value="'+(r?r.day:new Date().getDate())+'"></label></div>'
+    +'<p class="muted" style="margin:0">Todo mês o app cria o lançamento sozinho, como pendente. Mudar aqui vale só para os próximos meses.</p>'
+    +'<button class="btn pri block" data-act="saveRec" data-id="'+(id||'')+'">Salvar</button>'+(r?'<button class="btn dng block" data-act="delRec" data-id="'+id+'">Remover conta fixa</button>':''));
+}
+function saveRec(id){
+  var val=parseNum($('#f-val').value),day=+$('#f-day').value;
+  if(!(val>0)){toast('Informe um valor maior que zero');return}
+  if(!(day>=1&&day<=31)){toast('Dia do mês entre 1 e 31');return}
+  var cid=$('#f-cat').value,c=cat(cid),desc=$('#f-desc').value.trim()||(c?c.name:'Conta fixa');
+  if(!Array.isArray(S.rec))S.rec=[];
+  if(id){var r=S.rec.find(function(x){return x.id===id});if(r){r.type=F.type;r.desc=desc;r.val=val;r.cat=cid;r.day=day}logA('Editou conta fixa',desc,val)}
+  else{S.rec.push({id:uid(),type:F.type,desc:desc,val:val,cat:cid,day:day,from:ym(new Date()),done:[]});logA('Criou conta fixa',desc,val)}
+  save();genRec();closeSheet();render();toast('Conta fixa salva');
+}
+function cashNote(){
+  var L=mtx(),pr=L.filter(function(t){return t.paid}),cash=r2(total(pr,'r')-total(pr,'d')),prev=r2(total(L,'r')-total(L,'d'));
+  return '<p class="sumnote">Em caixa agora: <b>'+brl(cash)+'</b> (só o que já foi pago ou recebido). Sobra no fim do mês, depois de pagar tudo: <b>'+brl(prev)+'</b>.</p>';
+}
+function chart6(){
+  var d=[],i,mx=1;
+  for(i=5;i>=0;i--){var m=addM(T.m,-i),L=S.tx.filter(function(t){return t.date.slice(0,7)===m}),o={m:m,r:total(L,'r'),d:total(L,'d')};mx=Math.max(mx,o.r,o.d);d.push(o)}
+  var s='flex:1;border-radius:4px 4px 0 0;min-height:2px;';
+  return '<div class="card2"><h3>Últimos 6 meses</h3><div style="display:flex;gap:10px;align-items:flex-end;height:120px">'+d.map(function(x){return '<div style="flex:1;display:flex;gap:3px;align-items:flex-end;height:100%"><i style="'+s+'height:'+x.r/mx*100+'%;background:var(--ok)"></i><i style="'+s+'height:'+x.d/mx*100+'%;background:var(--accent)"></i></div>'}).join('')+'</div><div style="display:flex;gap:10px;margin-top:6px">'+d.map(function(x){return '<small style="flex:1;text-align:center">'+MESES[+x.m.slice(5)-1].slice(0,3)+'</small>'}).join('')+'</div><p style="margin:8px 0 0"><small><span style="color:var(--ok)">■</span> Receitas · <span style="color:var(--accent)">■</span> Despesas</small></p></div>';
 }
 function dueInfo(t){
   if(t.type!=='d'||t.paid)return null;
@@ -369,7 +414,7 @@ function vHome(){
   var by=spentBy(L),arr=Object.keys(by).map(function(k){return {c:cat(k),v:by[k]}}).sort(function(a,b){return b.v-a.v}),mx=arr.length?arr[0].v:1;
   var h=monthNav()+'<div class="dsum"><div class="dt"><small>Receitas</small><strong style="color:var(--ok)">'+brl(rec)+'</strong></div><div class="dt"><small>Despesas</small><strong>'+brl(des)+'</strong></div><div class="dt'+(sal<0?' late':' hot')+'"><small>Saldo</small><strong>'+brl(sal)+'</strong></div></div>';
   if(pend.length)h+='<p class="sumnote">A pagar neste mês: '+brl(pv)+' em '+pend.length+(pend.length===1?' conta':' contas')+'.</p>';
-  h+=alertsHTML();
+  h+=cashNote();h+=alertsHTML();
   if(!L.length){h+='<div class="empty"><h3>Nada lançado em '+MESES[+T.m.split('-')[1]-1].toLowerCase()+'</h3><p>Toque em “+ Lançar” para registrar sua primeira despesa ou receita.</p></div>';$('#main').innerHTML=h;return}
   var rc=L.slice().sort(function(a,b){return a.date<b.date?1:a.date>b.date?-1:0}).slice(0,5);
   h+='<div class="lbl" style="margin:4px 0 8px">Últimos lançamentos</div><div class="list">'+rc.map(txRow).join('')+'</div>';
@@ -389,7 +434,7 @@ function vPct(){
   var paidV=r2(L.filter(function(t){return t.type==='d'&&t.paid}).reduce(function(a,t){return a+t.val},0)),pendV=r2(des-paidV);
   var pc=function(a,b){return b>0?Math.round(a/b*100)+'%':'—'};
   var h=monthNav()+'<div class="dsum"><div class="dt"><small>Gasto da receita</small><strong>'+pc(des,rec)+'</strong><em>'+brl(des)+' de '+brl(rec)+'</em></div><div class="dt"><small>Pago</small><strong style="color:var(--ok)">'+pc(paidV,des)+'</strong><em>'+brl(paidV)+'</em></div><div class="dt'+(pendV>0?' late':'')+'"><small>Pendente</small><strong>'+pc(pendV,des)+'</strong><em>'+brl(pendV)+'</em></div></div>'
-    +'<div class="card2"><h3>Despesas por categoria</h3>'+pctBars('d',des)+'</div>'
+    +chart6()+'<div class="card2"><h3>Despesas por categoria</h3>'+pctBars('d',des)+'</div>'
     +'<div class="card2"><h3>Receitas por categoria</h3>'+pctBars('r',rec)+'</div>';
   $('#main').innerHTML=subTabs()+h;
 }
@@ -431,8 +476,9 @@ function vSet(){
   $('#main').innerHTML='<div class="banner" '+(storageOK?'hidden':'')+'>Este navegador não está guardando os dados. Faça um backup agora.</div>'
     +'<div class="card2"><h3>Seu título</h3><label class="fld"><span>Nome no cabeçalho do Início</span><input id="shop" type="text" placeholder="Ex.: Minhas contas" value="'+esc(S.shop)+'" autocomplete="off"></label></div>'
     +'<div class="card2"><h3>Tema</h3><div class="pals">'+PALS.map(function(p){var on=p.id===S.theme;return '<button class="pal'+(on?' on':'')+'" data-act="pal" data-id="'+p.id+'" aria-pressed="'+on+'"><span class="dot" style="background:'+p.a+'">'+(on?'✓':'')+'</span><small>'+p.n+'</small></button>'}).join('')+'</div></div>'
+    +'<div class="card2"><h3>Contas fixas</h3><p>Entram sozinhas todo mês, como pendentes.</p>'+(S.rec||[]).map(function(r){var c=cat(r.cat);return '<div class="row" data-act="editRec" data-id="'+r.id+'" role="button" tabindex="0" style="grid-template-columns:minmax(0,1fr) auto"><div class="mid"><b>'+esc(r.desc)+'</b><small>Todo dia '+r.day+' · '+esc(c?c.name:'')+'</small></div><b class="num">'+brl(r.val)+'</b></div>'}).join('')+'<button class="btn block" style="margin-top:8px" data-act="newRec">+ Nova conta fixa</button></div>'
     +'<div class="card2"><h3>Novos lançamentos</h3><label class="chk"><input type="checkbox" id="defpaid" '+(S.defPaid?'checked':'')+'> Já começar como pago</label><p>Desmarcado, todo lançamento novo fica pendente (a pagar) até você tocar em Pendente.</p></div>'
-    +'<div class="card2"><h3>Backup</h3><p>Os dados ficam neste aparelho. Copie o backup de vez em quando e guarde no app Notas.</p><button class="btn" data-act="bkCopy">Copiar backup</button><button class="btn" data-act="bkOpen">Restaurar backup</button></div>'
+    +'<div class="card2"><h3>Backup</h3><p>Os dados ficam neste aparelho. Copie o backup de vez em quando e guarde no app Notas.</p><button class="btn" data-act="bkCopy">Copiar backup</button><button class="btn" data-act="csv">Exportar planilha (CSV)</button><button class="btn" data-act="bkOpen">Restaurar backup</button></div>'
     +'<div class="card2"><h3>Apagar tudo</h3><p>Remove todos os lançamentos e volta às categorias padrão.</p><button class="btn dng" data-act="wipe">Apagar todos os dados</button></div>';
 }
 function render(){
@@ -506,6 +552,14 @@ var A={
   bkGo:function(){try{var o=JSON.parse($('#bk-p').value);if(!valid(o))throw 0;S=o;save();applyTheme();closeSheet();render();toast('Backup restaurado')}catch(e){toast('Texto de backup inválido')}},
   wipe:function(el){twoTap(el,function(){S=DEF();save();applyTheme();render();toast('Dados apagados')})},
   hSub:function(el){T.h=el.dataset.v;vHist()},
+  unpay:function(el){var t=S.tx.find(function(x){return x.id===el.dataset.id});if(t){t.paid=false;logA('Desfez pagamento',t.desc,t.val);save();var s=$('#main').scrollTop;render();$('#main').scrollTop=s;toast('Voltou para pendente')}},
+  newRec:function(){recForm()},editRec:function(el){recForm(el.dataset.id)},saveRec:function(el){saveRec(el.dataset.id)},
+  delRec:function(el){twoTap(el,function(){var r=S.rec.find(function(x){return x.id===el.dataset.id});if(r)logA('Removeu conta fixa',r.desc,r.val);S.rec=S.rec.filter(function(x){return x.id!==el.dataset.id});save();closeSheet();render()})},
+  csv:function(){
+    var rows=[['Data','Tipo','Descrição','Categoria','Valor','Situação']].concat(S.tx.slice().sort(function(a,b){return a.date<b.date?-1:1}).map(function(t){var c=cat(t.cat);return [t.date.split('-').reverse().join('/'),t.type==='d'?'Despesa':'Receita',t.desc,c?c.name:'',fmtNum(t.val),t.paid?'Pago':'Pendente']}));
+    var s='\ufeff'+rows.map(function(r){return r.map(function(v){return '"'+String(v).replace(/"/g,'""')+'"'}).join(';')}).join('\r\n');
+    try{var a=document.createElement('a');a.href=URL.createObjectURL(new Blob([s],{type:'text/csv;charset=utf-8'}));a.download='despesas.csv';document.body.appendChild(a);a.click();a.remove();toast('Planilha gerada')}catch(e){toast('Não foi possível gerar o arquivo')}
+  },
   histClear:function(el){twoTap(el,function(){S.log=[];save();render();toast('Histórico limpo')})},
   closeSheet:closeSheet,ovClose:closeSheet
 };
@@ -523,7 +577,8 @@ document.addEventListener('input',function(e){
   if(e.target.id==='shop'){S.shop=e.target.value;save()}
   if(e.target.id==='defpaid'){S.defPaid=e.target.checked;save()}
 });
-load();applyTheme();render();
+load();genRec();applyTheme();render();
+if('serviceWorker' in navigator&&/^https?:/.test(location.protocol))navigator.serviceWorker.register('sw.js').catch(function(){});
 })();
 </script>
 </body></html>
