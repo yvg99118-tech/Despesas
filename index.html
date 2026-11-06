@@ -281,6 +281,13 @@ body{padding-left:0!important;padding-right:0!important}
 #hd h1{font-family:var(--f-body);font-size:17px;font-weight:600;letter-spacing:0;text-align:center;flex:1}
 .hbtn{width:44px;height:44px;border-radius:50%;border:0;background:rgba(255,255,255,.28);color:var(--accent-ink);font-size:26px;font-weight:700;line-height:1}
 .hsp{width:44px}
+.hbtn{display:grid;place-items:center;padding:0}
+.hlt{width:94px;display:flex;align-items:center}
+.hrt{width:94px;display:flex;align-items:center;justify-content:flex-end;gap:6px}
+.hbtn svg{width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:2.4;stroke-linecap:round}
+.srow{cursor:pointer}
+.sres{display:grid;gap:8px}
+.sres .row{grid-template-columns:auto minmax(0,1fr) auto}
 .hmon{display:flex;align-items:center;justify-content:space-between;padding:4px 20px 12px}
 .hmon b{font-size:24px;font-weight:700}
 .hmon button{border:0;background:none;color:inherit;font-size:32px;padding:0 6px;line-height:1}
@@ -647,7 +654,7 @@ function render(){
   var tt={home:'Início',tx:'Lançamentos',cats:'Categorias',hist:'Histórico',set:'Ajustes'};
   var home=T.tab==='home';
   $('#main').className=home?'home':'';
-  $('#hd').innerHTML='<div class="hbar">'+(home?'<span class="hsp"></span>':'<button class="hbtn" data-act="goHome" aria-label="Voltar">‹</button>')+'<h1>'+esc(home?(S.shop||'Minhas Despesas'):tt[T.tab])+'</h1><button class="hbtn" data-act="drawer" aria-label="Menu">⋮</button></div>'+(home?'<div class="hmon"><button data-act="mPrev" aria-label="Mês anterior">‹</button><b>'+MESES[+T.m.slice(5)-1].toLowerCase()+' / '+T.m.slice(0,4)+'</b><button data-act="mNext" aria-label="Próximo mês">›</button></div>':'');
+  $('#hd').innerHTML='<div class="hbar">'+'<div class="hlt">'+(home?'':'<button class="hbtn" data-act="goHome" aria-label="Voltar">‹</button>')+'</div>'+'<h1>'+esc(home?(S.shop||'Minhas Despesas'):tt[T.tab])+'</h1><div class="hrt"><button class="hbtn" data-act="search" aria-label="Buscar"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/></svg></button><button class="hbtn" data-act="drawer" aria-label="Menu">⋮</button></div></div>'+(home?'<div class="hmon"><button data-act="mPrev" aria-label="Mês anterior">‹</button><b>'+MESES[+T.m.slice(5)-1].toLowerCase()+' / '+T.m.slice(0,4)+'</b><button data-act="mNext" aria-label="Próximo mês">›</button></div>':'');
   ({home:vHome,tx:vTx,cats:vCats,hist:vHist,set:vSet})[T.tab]();
 }
 
@@ -693,6 +700,39 @@ function saveCat(id){
   save();closeSheet();render();
 }
 
+/* ---------- Busca (lupa) ---------- */
+var SQ='';
+function openSearch(){
+  closeSheet();
+  sheet('Buscar','<input class="search" id="s-q" type="search" placeholder="Buscar por nome, categoria, valor ou data" value="'+esc(SQ)+'" autocomplete="off" style="margin-bottom:0"><div class="sres" id="s-res"></div>');
+  searchList();
+  setTimeout(function(){var e=$('#s-q');if(e)e.focus()},60);
+}
+function searchList(){
+  var el=$('#s-res');if(!el)return;
+  var q=norm(SQ).trim();
+  if(!q){el.innerHTML='<div class="empty"><h3>Digite para buscar</h3><p>Procura em todos os meses: despesas, saldos, cartão e notas.</p></div>';return}
+  var qn=q.replace(',','.'),items=[];
+  S.tx.forEach(function(t){
+    var c=cat(t.cat),dstr=t.date.split('-').reverse().join('/'),hay=norm(t.desc)+' '+norm(c?c.name:'')+' '+dstr+' '+t.date+' '+fmtNum(t.val).replace(',','.')+' '+fmtNum(t.val);
+    if(hay.indexOf(q)>-1||hay.indexOf(qn)>-1)items.push({k:'t',d:t.date,t:t});
+  });
+  notesOf().forEach(function(n){
+    var c=cat(n.cat),dstr=n.date.split('-').reverse().join('/'),hay='nota '+norm(n.desc)+' '+norm(c?c.name:'')+' '+dstr+' '+n.date+' '+fmtNum(n.val).replace(',','.')+' '+fmtNum(n.val);
+    if(hay.indexOf(q)>-1||hay.indexOf(qn)>-1)items.push({k:'n',d:n.date,t:n});
+  });
+  items.sort(function(a,b){return a.d<b.d?1:a.d>b.d?-1:0});
+  if(!items.length){el.innerHTML='<div class="empty"><h3>Nada encontrado</h3><p>Tente outra palavra, valor ou data.</p></div>';return}
+  var tot=items.length,sum=r2(items.filter(function(x){return x.k==='t'&&x.t.type==='d'}).reduce(function(a,x){return a+x.t.val},0));
+  el.innerHTML='<p class="muted" style="margin:0">'+tot+(tot===1?' resultado':' resultados')+(sum>0?' · despesas somam '+brl(sum):'')+(tot>60?' · mostrando os 60 mais recentes':'')+'</p>'
+    +items.slice(0,60).map(function(x){
+      var t=x.t,c=cat(t.cat),dt=t.date.split('-').reverse().join('/');
+      if(x.k==='n')return '<div class="row srow" data-act="sEditNote" data-id="'+t.id+'" role="button" tabindex="0"><div class="th">'+(t.photo?'<img alt="" src="'+t.photo+'">':'🧾')+'</div><div class="mid"><b>'+esc(t.desc||'Nota')+'</b><small>Nota · '+esc(c?c.name:'Sem categoria')+' · '+dt+'</small></div><div class="right"><b class="num">'+brl(t.val)+'</b></div></div>';
+      var r=t.type==='r',st=t.paid?(r?'Recebido':'Pago'):(r?'A receber':'Pendente');
+      return '<div class="row srow" data-act="sEdit" data-id="'+t.id+'" role="button" tabindex="0"><div class="th">'+esc(c?c.emoji:'📦')+'</div><div class="mid"><b>'+esc(t.desc)+'</b><small>'+esc(c?c.name:'Sem categoria')+' · '+dt+(isCard(t)?' · 💳':'')+'</small></div><div class="right"><b class="num" style="color:'+(r?'var(--ok)':'var(--ink)')+'">'+(r?'+ ':'− ')+brl(t.val)+'</b><small>'+st+'</small></div></div>';
+    }).join('');
+}
+
 /* ---------- Eventos ---------- */
 var A={
   tab:function(el){T.tab=el.dataset.tab;render()},
@@ -726,6 +766,9 @@ var A={
     var s='\ufeff'+rows.map(function(r){return r.map(function(v){return '"'+String(v).replace(/"/g,'""')+'"'}).join(';')}).join('\r\n');
     try{var a=document.createElement('a');a.href=URL.createObjectURL(new Blob([s],{type:'text/csv;charset=utf-8'}));a.download='despesas.csv';document.body.appendChild(a);a.click();a.remove();toast('Planilha gerada')}catch(e){toast('Não foi possível gerar o arquivo')}
   },
+  search:openSearch,
+  sEdit:function(el){var t=S.tx.find(function(x){return x.id===el.dataset.id});if(t){T.m=t.date.slice(0,7);if(isCard(t))T.hf='c';else T.hf=t.type==='r'?'r':'d'}T.tab='home';render();txForm(el.dataset.id)},
+  sEditNote:function(el){var n=notesOf().find(function(x){return x.id===el.dataset.id});if(n){T.m=n.date.slice(0,7);T.hf='n'}T.tab='home';render();noteForm(el.dataset.id)},
   drawer:openDrawer,goHome:function(){T.tab='home';render()},
   dgo:function(el){closeSheet();if(el.dataset.h)T.h=el.dataset.h;if(el.dataset.hf)T.hf=el.dataset.hf;if(el.dataset.tab){T.tab=el.dataset.tab;render()}else if(A[el.dataset.to])A[el.dataset.to](el)},
   repT:function(){$('#rep-box').hidden=!$('#f-rep').checked},rkT:function(){$('#np-box').hidden=!$('#rk-p').checked},
@@ -745,6 +788,7 @@ document.addEventListener('keydown',function(e){
 });
 document.addEventListener('input',function(e){
   if(e.target.id==='q'){T.q=e.target.value;txList()}
+  if(e.target.id==='s-q'){SQ=e.target.value;searchList()}
   if(e.target.id==='shop'){S.shop=e.target.value;save()}
   if(e.target.id==='defpaid'){S.defPaid=e.target.checked;save()}
 });
