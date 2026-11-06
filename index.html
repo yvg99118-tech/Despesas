@@ -420,9 +420,9 @@ function hrow(t){
   return '<div class="hr '+(r?'inc ':'')+k+'" data-act="edit" data-id="'+t.id+'" role="button" tabindex="0"><div><b>'+esc(t.desc)+'</b><small>'+t.date.split('-').reverse().join('/')+(c?' · '+esc(c.name):'')+'</small></div><div class="hv"><b>'+(r?'+ ':'')+brl(t.val)+'</b><button class="hs" data-act="'+(t.paid?'unpay':'pay')+'" data-id="'+t.id+'">'+st+'</button></div></div>';
 }
 function vHome(){
-  var f=T.hf||'d';if(f==='all')f='d';if(f==='n'){vNotas();return}if(f==='c'){vCartao();return}var A0=mtx().sort(function(a,b){return a.date<b.date?-1:a.date>b.date?1:0}),h='',late=0,soon=0;
+  var f=T.hf||'d';if(f==='all')f='d';if(f==='n'){vNotas();return}if(f==='c'){vCartao();return}var A0=mtx().filter(function(t){return !isCard(t)}).sort(function(a,b){return a.date<b.date?-1:a.date>b.date?1:0}),h='',late=0,soon=0;
   var L=f==='all'?A0:A0.filter(function(t){return t.type===f});
-  S.tx.forEach(function(t){var d=dueInfo(t);if(d){if(d.k==='late')late++;else soon++}});
+  S.tx.forEach(function(t){if(isCard(t))return;var d=dueInfo(t);if(d){if(d.k==='late')late++;else soon++}});
   h+='<div class="seg htabs">'+[['d','Despesas'],['r','Saldos'],['n','Notas'],['c','Cartão']].map(function(x){return '<button class="'+(f===x[0]?'on':'')+'" data-act="hf" data-v="'+x[0]+'">'+x[1]+'</button>'}).join('')+'</div>';
   if(late)h+='<div class="bn late">Existem parcelas em atraso</div>';
   if(soon)h+='<div class="bn soon">Contas vencendo em até 5 dias</div>';
@@ -485,7 +485,10 @@ function saveNote(id){
 /* ---------- Cartão ---------- */
 function vCartao(){
   var L=mtx().filter(isCard).sort(function(a,b){return a.date<b.date?-1:a.date>b.date?1:0}),
-    tot=total(L,'d'),pend=r2(L.filter(function(t){return !t.paid}).reduce(function(a,t){return a+t.val},0)),h=hseg('c');
+    tot=total(L,'d'),pend=r2(L.filter(function(t){return !t.paid}).reduce(function(a,t){return a+t.val},0)),h=hseg('c'),late=0,soon=0;
+  S.tx.forEach(function(t){if(!isCard(t))return;var d=dueInfo(t);if(d){if(d.k==='late')late++;else soon++}});
+  if(late)h+='<div class="bn late">Existem parcelas do cartão em atraso</div>';
+  if(soon)h+='<div class="bn soon">Compras do cartão vencendo em até 5 dias</div>';
   if(!L.length)h+='<div class="empty"><h3>Nenhuma compra no cartão neste mês</h3><p>Toque no botão + para lançar uma compra no cartão. Parceladas aparecem em cada mês.</p></div>';
   else h+=L.map(hrow).join('');
   if(pend>0)h+='<div style="padding:12px 16px"><button class="btn block" data-act="payCard">💳 Marcar fatura como paga</button></div>';
