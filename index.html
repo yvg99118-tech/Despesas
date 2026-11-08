@@ -796,6 +796,29 @@ document.addEventListener('change',function(e){
   if(e.target.id==='n-file'&&e.target.files&&e.target.files[0])readPhoto(e.target.files[0],function(d){N.photo=d;var p=$('#n-pv');if(p)p.innerHTML=notePv()});
 });
 load();genRec();applyTheme();render();
+/* Recebe comprovante compartilhado de outro app (Web Share Target) */
+function pegaCompartilhado(){
+  try{
+    if(!/[?&]compartilhado=1/.test(location.search)||!window.caches)return;
+    history.replaceState(null,'',location.pathname);
+    var key=new URL('ultimo-comprovante',location.href).href;
+    caches.open('compartilhados').then(function(c){
+      return c.match(key).then(function(r){
+        if(!r)return;
+        return r.blob().then(function(b){
+          c.delete(key);
+          readPhoto(b,function(d){
+            T.tab='home';T.hf='n';T.m=ym(new Date());render();
+            noteForm();N.photo=d;
+            var p=$('#n-pv');if(p)p.innerHTML=notePv();
+            toast('Comprovante recebido: informe valor e categoria');
+          });
+        });
+      });
+    }).catch(function(){});
+  }catch(e){}
+}
+pegaCompartilhado();
 if('serviceWorker' in navigator&&/^https?:/.test(location.protocol))navigator.serviceWorker.register('sw.js').catch(function(){});
 })();
 </script>
